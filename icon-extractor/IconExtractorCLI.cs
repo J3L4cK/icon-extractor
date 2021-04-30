@@ -1,4 +1,5 @@
 ﻿using Shell32;
+using System.Linq;
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Diagnostics.CodeAnalysis;
@@ -32,9 +33,16 @@ namespace IconExtractor {
 					alias: "--filename",
 					description: "alternative name for the extracted image \r\nOptional \r\nDefault: filename from extracted file"),
 				new Option<int>(
+					alias: "--size",
+					getDefaultValue: () => 16,
+					description: "try to get the size from .ico"),
+				new Option<int>(
 					alias: "--resize",
 					getDefaultValue: () => -1,
-					description: "new size for the extracted image \r\nOptional \r\nDefault: original size"),
+					description: "resize the extracted image with loosing quality \r\nOptional \r\nDefault: original size"),
+				new Option<bool>(
+					alias: "--search-icon",
+					description: "search for .ico file in the .exe directory"),
 			};
 
 
@@ -47,24 +55,45 @@ namespace IconExtractor {
 		private static bool IsOS(OSPlatform platform) => RuntimeInformation.IsOSPlatform(platform);
 
 		public int Execute(string[] args) {
-			RootCommand.Handler = CommandHandler.Create<string, string, string, int>(CmdHandler);
+			RootCommand.Handler = CommandHandler.Create<string, string, string, int, int, bool>(CmdHandler);
 
 			return RootCommand.InvokeAsync(args).Result;
 		}
 
-		private static void CmdHandler(string file, string output, string filename, int resize) {
+		private static void CmdHandler(string file, string output, string filename, int size, int resize, bool searchIcon) {
 			var origFilename = Path.GetFileNameWithoutExtension(file);
 			var outputName = IsEmpty(filename) ? origFilename : filename;
 			var outputPath = Path.Combine(output, outputName);
 			outputPath += ".png";
 
 			var extension = Path.GetExtension(file);
+			var isIcoFile = extension == ".ico";
 			if (extension == ".lnk") {
 				file = GetExePath(file);
 			}
 
-			using var icon = Icon.ExtractAssociatedIcon(file);
+			if(searchIcon) {
+				var directory = Path.GetDirectoryName(file);
+				var files = Directory.GetFiles(directory, "*.ico");
+
+				var ico = files.FirstOrDefault();
+				if(!IsEmpty(ico)) {
+					isIcoFile = true;
+					file = ico;
+				}
+			}
+
+			Icon icon;
+			if(isIcoFile) {
+				using var stream = File.OpenRead(file);
+				icon = new Icon(stream, new Size(size, size));
+			} else {
+				icon = Icon.ExtractAssociatedIcon(file);
+			}
+
 			using var bitmap = icon.ToBitmap();
+			icon.Dispose();
+
 			if (resize < 0) {
 				bitmap.MakeTransparent();
 				bitmap.Save(outputPath, ImageFormat.Png);
