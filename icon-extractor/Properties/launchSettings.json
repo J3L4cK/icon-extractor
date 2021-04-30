@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "icon-extractor": {
+      "commandName": "Project",
+      "commandLineArgs": "--file \"C:\\Windows\\system32\\Taskmgr.exe\" --output \"C:\\Temp\" --resize 64"
+    }
+  }
+}
